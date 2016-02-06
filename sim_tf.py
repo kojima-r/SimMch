@@ -1,9 +1,4 @@
 # -*- coding: utf-8 -*-
-# ==================================
-#
-#    Short Time Fourier Trasform
-#
-# ==================================
 from scipy import ceil, complex64, float64, hamming, zeros
 from scipy.fftpack import fft# , ifft
 from scipy import ifft # こっちじゃないとエラー出るときあった気がする
@@ -16,56 +11,13 @@ import numpy as np
 import numpy.random as npr
 import math
 
+import simmch
 from HARK_TF_Parser.read_mat import read_hark_tf
 from HARK_TF_Parser.read_param import read_hark_tf_param
 
 #from simuration_random import gen_random_source
 # gen_random_source(num,near,far,num_type)
 # [{"distance":d,"azimuth":theta,"elevation":0,"type":type_id}]
-
-
-# ======
-#  STFT
-# ======
-"""
-x : 入力信号
-win : 窓関数
-step : シフト幅
-"""
-def stft(x, win, step):
-    l = len(x) # 入力信号の長さ
-    N = len(win) # 窓幅、つまり切り出す幅
-    M = int(ceil(float(l - N + step) / step)) # スペクトログラムの時間フレーム数
-    
-    new_x = zeros(N + ((M - 1) * step), dtype = float64)
-    new_x[: l] = x # 信号をいい感じの長さにする
-    
-    X = zeros([M, N], dtype = complex64) # スペクトログラムの初期化(複素数型)
-    for m in xrange(M):
-        start = step * m
-        X[m, :] = fft(new_x[start : start + N] * win)
-    return X
-
-# =======
-#  iSTFT
-# =======
-def istft(X, win, step):
-    M, N = X.shape
-    assert (len(win) == N), "FFT length and window length are different."
-
-    l = (M - 1) * step + N
-    x = zeros(l, dtype = float64)
-    wsum = zeros(l, dtype = float64)
-    for m in xrange(M):
-        start = step * m
-        ### 滑らかな接続
-        x[start : start + N] = x[start : start + N] + ifft(X[m, :]).real * win
-        wsum[start : start + N] += win ** 2 
-    pos = (wsum != 0)
-    x_pre = x.copy()
-    ### 窓分のスケール合わせ
-    x[pos] /= wsum[pos]
-    return x
 
 def nearest_direction_index(tf_config,theta):
 	nearest_theta=math.pi
@@ -79,26 +31,62 @@ def nearest_direction_index(tf_config,theta):
 		
 		if dtheta>math.pi:
 			dtheta=2*math.pi-dtheta
-
 		if dtheta<nearest_theta:
 			nearest_theta=dtheta
-			print nearest_theta
 			nearest_index=key_index
 
 	return nearest_index
 
+def make_noise(x):
+	rad=(npr.rand()*2*math.pi)
+	return (math.cos(rad)+1j*math.sin(rad))
+
+def apply_tf(data,fftLen, step,tf_config,src_index,noise_amp=0):
+	win = hamming(fftLen) # ハミング窓
+	### STFT
+	spectrogram = simmch.stft(data, win, step)
+	spec=spectrogram[:, : fftLen / 2 + 1]
+	#print spectrogram[7000, :]
+	#[4,3,2,1,2*,3*]
+	### Apply TF
+	tf=tf_config["tf"][src_index]
+	print "# position:",tf["position"]
+	pos=tf["position"]
+	th=math.atan2(pos[1],pos[0])# -pi ~ pi
+	print "# theta(deg):",th/math.pi*180
+	out_wavdata=[]
+	for mic_index in xrange(tf["mat"].shape[0]):
+		tf_mono=tf["mat"][mic_index]
+		print "# src spectrogram:",spec.shape
+		print "# tf spectrogram:",tf_mono.shape
+		tf_spec=spec*tf_mono
+		spec_c=np.conjugate(tf_spec[:,:0:-1])
+		out_spec=np.c_[tf_spec,spec_c[:,1:]]
+		noise_spec=np.zeros_like(out_spec)
+		v_make_noise = np.vectorize(make_noise)
+		noise_spec=v_make_noise(noise_spec)
+		out_spec=out_spec+noise_amp*noise_spec
+		### iSTFT
+		resyn_data = simmch.istft(out_spec, win, step)
+		out_wavdata.append(resyn_data)
+	# concat waves
+	mch_wavdata=np.vstack(out_wavdata)
+	return mch_wavdata
+
 if __name__ == "__main__":
 	# argv check
 	if len(sys.argv)<5:
-		print >>sys.stderr, "Usage: sim_tf.py <in: tf.zip(HARK2 transfer function file)> <in: src.wav> <in:src theta> <out: dest.wav>"
+		print >>sys.stderr, "Usage: sim_tf.py <in: tf.zip(HARK2 transfer function file)> <in: src.wav> <in:ch> <in:src theta> <in:volume> <out: dest.wav>"
 		quit()
 	#
 	npr.seed(1234)
 	tf_filename=sys.argv[1]
 	tf_config=read_hark_tf(tf_filename)
-	src_theta=float(sys.argv[3])/180.0*math.pi
+	target_ch=int(sys.argv[3])
+	src_theta=float(sys.argv[4])/180.0*math.pi
 	src_index=nearest_direction_index(tf_config,src_theta)
-	output_filename=sys.argv[4]
+	src_volume=float(sys.argv[5])
+	output_filename=sys.argv[6]
 	if not src_index in tf_config["tf"]:
 		print >>sys.stderr, "Error: tf index",src_index,"does not exist in TF file"
 		quit()
@@ -120,47 +108,17 @@ if __name__ == "__main__":
 	nch=wr.getnchannels()
 	wavdata = np.frombuffer(data, dtype= "int16")
 	fs=wr.getframerate()
-	mono_wavdata = wavdata[1::nch]
+	mono_wavdata = wavdata[target_ch::nch]
 	wr.close()
 	
 	data = mono_wavdata
 
 	fftLen = 512
-	win = hamming(fftLen) # ハミング窓
 	step = fftLen / 4
-
-	### STFT
-	spectrogram = stft(data, win, step)
-	spec=spectrogram[:, : fftLen / 2 + 1]
-	#print spectrogram[7000, :]
-	#[4,3,2,1,2*,3*]
-	
-	### Apply TF
-	tf=tf_config["tf"][src_index]
-	print "# position:",tf["position"]
-	pos=tf["position"]
-	th=math.atan2(pos[1],pos[0])# -pi ~ pi
-	print "# theta(deg):",th/math.pi*180
-	out_wavdata=[]
-	for mic_index in xrange(tf["mat"].shape[0]):
-		tf_mono=tf["mat"][mic_index]
-		print "# src spectrogram:",spec.shape
-		print "# tf spectrogram:",tf_mono.shape
-		tf_spec=spec*tf_mono
-		spec_c=np.conjugate(tf_spec[:,:0:-1])
-		out_spec=np.c_[tf_spec,spec_c[:,1:]]
-		### iSTFT
-		resyn_data = istft(out_spec, win, step)
-		out_wavdata.append(resyn_data)
-	# concat waves
-	mch_wavdata=np.vstack(out_wavdata).transpose()
+	# apply transfer function
+	mch_wavdata=apply_tf(data,fftLen, step,tf_config,src_index)
+	mch_wavdata=mch_wavdata*src_volume
 	# save data
-	out_wavdata = mch_wavdata.copy(order='C')
-	print "# save data:",out_wavdata.shape
-	ww = wave.Wave_write(output_filename)
-	ww.setparams(wr.getparams())
-	ww.setnchannels(out_wavdata.shape[1])
-	ww.setnframes(out_wavdata.shape[0])
-	ww.writeframes(array.array('h', out_wavdata.astype("int16").ravel()).tostring())
-	ww.close()
+	simmch.save_mch_wave(mch_wavdata,output_filename,params=wr.getparams())
+
 
