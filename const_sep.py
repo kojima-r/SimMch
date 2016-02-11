@@ -20,14 +20,28 @@ if __name__ == "__main__":
 		help="arrival direction of sound (degree)",
 		default=None,
 		type=str)
+	
+	parser.add_option(
+		"-s", "--script", dest="script",
+		help="temporary script",
+		default="./const_sep.n",
+		type=str)
+	
+	parser.add_option(
+		"-i", "--input", dest="org_script",
+		help="script",
+		default="./const_sep.n.tmpl",
+		type=str)
+
+
 
 	(options, args) = parser.parse_args()
 		
 	# Separation
 	f=args[0]
 
-	i_file = open("const_sep.n.tmpl")
-	o_file = open("const_sep.n", "w")
+	i_file = open(options.org_script)
+	o_file = open(options.script, "w")
 	direction=map(float,options.direction.split(","))
 	print f
 	# Replace
@@ -48,5 +62,5 @@ if __name__ == "__main__":
 	o_file.close()
 	i_file.close()
 
-	subprocess.call(["./const_sep.n",f])
+	subprocess.call(["batchflow",options.script,f])
 
