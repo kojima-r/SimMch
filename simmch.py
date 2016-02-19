@@ -53,6 +53,19 @@ def istft(X, win, step):
     x[pos] /= wsum[pos]
     return x
 
+def apply_window(x, win, step):
+    l = len(x)
+    N = len(win)
+    M = int(ceil(float(l - N + step) / step))
+    
+    new_x = zeros(N + ((M - 1) * step), dtype = float64)
+    new_x[: l] = x #zero padding
+    
+    X = zeros([M, N], dtype = float64)
+    for m in xrange(M):
+        start = step * m
+        X[m, :] = new_x[start : start + N] * win
+    return X
 
 def read_mch_wave(filename):
 	wr = wave.open(filename, "rb")

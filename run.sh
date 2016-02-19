@@ -7,3 +7,4 @@ python make_noise.py sample/noise01.wav -c 7
 python sim_tf.py ./sample/microcone_geotf.zip ./sample/test16.wav 1 90 1 ./sample/test_geotf00.wav 
 python ./wav_mix.py ./sample/noise01.wav ./sample/test_geotf00.wav -o mixed.wav
 python const_sep.py -t ./sample/microcone_geotf.zip -d 90,0 mixed.wav 
+
