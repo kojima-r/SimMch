@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from scipy import ceil, complex64, float64, hamming, zeros
-from scipy.fftpack import fft# , ifft
-from scipy import ifft # こっちじゃないとエラー出るときあった気がする
+from scipy.fftpack import fft
+from scipy import ifft
 from scipy.io.wavfile import read
 import wave
 import array

@@ -1,6 +1,6 @@
 # SimMch
 
-# Install
+# セットアップ
 ```
 $ ./setup.sh
 ```
