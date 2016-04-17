@@ -24,7 +24,7 @@ def make_noise(x):
 
 
 if __name__ == "__main__":
-	usage = 'usage: %s [options] <in: src.wav> <out: dest.wav>' % sys.argv[0]
+	usage = 'usage: %s [options] <out: dest.wav>' % sys.argv[0]
 	parser = OptionParser(usage)
 	parser.add_option(
 		"-t", "--tf",
@@ -66,17 +66,26 @@ if __name__ == "__main__":
 	parser.add_option(
 		"-c", "--channel", dest="channel",
 		help="target channel of input sound (>=0)",
-		default=None,
+		default=1,
 		type=int,
 		metavar="CH")
 	
 	parser.add_option(
-		"-p", "--power", dest="power",
-		help="power of noise sound",
-		default=1,
+		"-A", "--amplitude", dest="amp",
+		help="amplitude of output sound (0<=v<=1)",
+		default=1.0,
 		type=float,
-		metavar="POWER")
+		metavar="AMP")
+		
+	parser.add_option(
+		"-T", "--template", dest="template",
+		help="template wav file",
+		default=None,
+		type=str,
+		metavar="FILE")
 	
+
+
 	(options, args) = parser.parse_args()
 	
 	# argv check
@@ -100,15 +109,22 @@ if __name__ == "__main__":
 	elif options.duration!=None:
 		nsamples=options.samplingrate*options.duration
 		length=((nsamples-(fftLen-step))-1)/step+1
+	elif options.template!=None:
+		wav_filename=options.template
+		print "... reading", wav_filename
+		wav_data=simmch.read_mch_wave(wav_filename)
+		nsamples=wav_data["nframes"]
+		nch=wav_data["nchannels"]
+		length=((nsamples-(fftLen-step))-1)/step+1
 	else:
 		print >>sys.stderr,"[ERROR] unknown duration (please indicate --duration, --samples, or --frames)"
 		quit()
 
 	# stft length <-> samples
-	
-	data=np.zeros((nch,length,fftLen/2+1),dtype = complex64)
+	src_volume=1
+	data=np.zeros((nch,int(length),fftLen/2+1),dtype = complex64)
 	v_make_noise = np.vectorize(make_noise)
-	data=v_make_noise(data)#*math.sqrt(1.0*fftLen)*options.power
+	data=v_make_noise(data)
 	print "#channels:",nch
 	print "#frames:",length
 	print "#samples:",nsamples
@@ -118,26 +134,21 @@ if __name__ == "__main__":
 	out_wavdata=[]
 	for mic_index in xrange(data.shape[0]):
 		spec=data[mic_index]
-		spec_c=np.conjugate(spec[:,:0:-1])
-		out_spec=np.c_[spec,spec_c[:,1:]]
-		#pow_f=np.mean(np.mean(abs(out_spec)**2,axis=1))
-		print "?",out_spec.shape
-		spectrum=np.sum(out_spec,axis=0)
-		test=np.sum(np.abs(out_spec),axis=0)
-		#print spectrum
-		#pow_test=np.mean(abs(test)**2)
-		#print "[CHECK] power(test):",pow_test
-		pow_f=np.mean(abs(spectrum)**2)
-		print "[CHECK] power(f):",pow_f
+		full_spec=simmch.make_full_spectrogram(spec)
+		s_sum=np.mean(np.abs(full_spec)**2,axis=1)
+		print "[CHECK] power(spec/frame):",np.mean(s_sum)
 		### iSTFT
-		resyn_data = simmch.istft(out_spec, win, step)
-		print resyn_data.shape
-		pow_w=np.sum(resyn_data**2)
-		print "[CHECK] power(x):",pow_w#/length
-		print "[CHECK] power:",pow_f/pow_w#/length
+		resyn_data = simmch.istft(full_spec, win, step)
+		x=simmch.apply_window(resyn_data, win, step)
+		w_sum=np.sum(x**2,axis=1)
+		print "[CHECK] power(x/frame):",np.mean(w_sum)
 		out_wavdata.append(resyn_data)
 	# concat waves
 	mch_wavdata=np.vstack(out_wavdata)
+	amp=np.max(np.abs(mch_wavdata))
+	print "[INFO] temporal max amplitude:",amp
+	g=32767.0/amp*options.amp
+	print "[INFO] gain:",g
+	mch_wavdata=mch_wavdata*g
 	simmch.save_mch_wave(mch_wavdata,output_filename,sample_width=2,framerate=options.samplingrate)
-	print "[CHECK] power in time domain:",np.mean(mch_wavdata**2,axis=1)
 	

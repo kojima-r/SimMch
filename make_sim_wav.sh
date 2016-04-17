@@ -1,21 +1,23 @@
 if [ $# -lt 4 ]; then
-	echo "usage: <in: wav> <in: wav> <out: wav> <out:wav> [<in: dir1> <in:dir2>]" 1>&2
+	echo "usage: <in: wav> <in: wav> <out: wav> <out:wav> [<in: dir1> <in:dir2> <in: s/n rate>]" 1>&2
 	exit 1
 fi
 
 # save current directory
 
+
 prev_dir=`pwd`
-target1=$dir/$1 #./sample/test16.wav
-target2=$dir/$2 #./sample/test16.wav
-output1=$dir/$3 #./sample/test16.wav
-output2=$dir/$4 #./sample/test16.wav
+target1=$prev_dir/$1 #./sample/test16.wav
+target2=$prev_dir/$2 #./sample/test16.wav
+output1=$prev_dir/$3 #./sample/test16.wav
+output2=$prev_dir/$4 #./sample/test16.wav
 dir1=0
 dir2=90
 
 if [ $# -gt 4 ]; then
 dir1=$5
 dir2=$6
+noise_rate=$7
 fi
 
 cd `dirname $0`
@@ -35,7 +37,11 @@ mkdir -p ${temp_dir}
 
 python ./sim_tf.py ${tf_gen} ${target1} ${ch} ${dir1} 1 ${temp_dir}/sim1.wav 
 python ./sim_tf.py ${tf_gen} ${target2} ${ch} ${dir2} 1 ${temp_dir}/sim2.wav 
-python ./wav_mix.py ${temp_dir}/sim1.wav ${temp_dir}/sim2.wav -o ${temp_dir}/mixed.wav
+
+python ./wav_mix.py ${temp_dir}/sim1.wav ${temp_dir}/sim2.wav -o ${temp_dir}/mixed_temp.wav
+python ./make_noise.py ${temp_dir}/noise.wav -T ${temp_dir}/mixed_temp.wav -A ${noise_rate}
+python ./wav_mix.py ${temp_dir}/mixed_temp.wav ${temp_dir}/noise.wav -o ${temp_dir}/mixed.wav
+
 
 # separation
 cd ${temp_dir}

@@ -69,11 +69,12 @@ if __name__ == "__main__":
 	### STFT
 	spectrogram = simmch.stft(data, win, step)
 	w_data = apply_window(data, win, step)
-	spec=spectrogram[:, : fftLen / 2 + 1]
 	w_sum=np.sum(w_data**2,axis=1)
+
+	spec=spectrogram[:, : fftLen / 2 + 1]
 	full_spec=simmch.make_full_spectrogram(spec)
-	#s_sum=np.mean((np.abs(spectrogram)**2),axis=1)
-	s_sum=np.mean((np.abs(full_spec)**2),axis=1)
+	s_sum=np.mean((np.abs(spectrogram)**2),axis=1)
+	
 	print "wav power:",w_sum
 	print "wav #frames:",w_sum.shape
 	print "spec power:",s_sum
