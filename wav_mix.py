@@ -23,7 +23,7 @@ if __name__ == "__main__":
 	parser.add_option(
 		"-V", "--volume", dest="volume",
 		help="volumes of input sound (0<=v<=1)",
-		default=None,
+		default=1.0,
 		type=str,
 		metavar="VOL")
 	
@@ -62,7 +62,11 @@ if __name__ == "__main__":
 	for wav_info in data:
 		l=wav_info[0].shape[1]
 		mix_wavdata[:,:l]+=wav_info[0].astype("float")
-	print "[INFO] max amplitude:",np.max(np.abs(mix_wavdata))
+	amp=np.max(np.abs(mix_wavdata))
+	print "[INFO] max amplitude:",amp
+	g=32767.0/amp*src_volume
+	print "[INFO] gain:",g
+	mix_wavdata*=g
 	# save data
 	if output_filename!=None:
 		simmch.save_mch_wave(mix_wavdata,output_filename)
