@@ -3,6 +3,7 @@ import sys
 import numpy as np
 import numpy.random as npr
 from scipy import hamming,interpolate
+import scipy
 
 import matplotlib
 matplotlib.use('Agg')
@@ -57,12 +58,33 @@ def estimate_spatial_correlation(spec,win_size,step):
 	# data: frame,block,spec,ch
 	data=slice_window(x, win_size, step)
 	a=np.transpose(data,(0,2,3,1))
-	b=np.transpose(data,(0,2,1,3))
+	b=np.transpose(data,(0,2,1,3)).conj()
 	print data.shape
 	c=np.einsum('ijkl,ijlm->ijkm',a,b)
 	# out_corr: frame,spec,ch1,ch2
 	out_corr=c*1.0/win_size;
+	#print c[0,0]
 	return out_corr
+
+def estimate_spatial_correlation2(spec,win_size,step):
+	# ch,frame,spec -> frame,spec,ch
+	n_ch=spec.shape[0]
+	n_frame=spec.shape[1]
+	n_bin=spec.shape[2]
+	corr=np.zeros((n_frame,n_bin,n_ch,n_ch),dtype=complex)
+	
+	# out_corr: frame,spec,ch1,ch2
+	for i in xrange(n_ch):
+		for j in xrange(n_ch):
+			corr[:,:,i,j]=spec[i]*spec[j].conj()
+	now_frame=0
+	out=[]
+	while(now_frame+win_size<=n_frame):
+		o=np.mean(corr[now_frame:now_frame+win_size],axis=0)
+		out.append(o)
+		now_frame+=step
+	return np.array(out)
+
 
 f=[10.0,
 	12.5,
@@ -101,10 +123,35 @@ f1=interpolate.interp1d(f,w,kind='cubic')
 def A_characteristic(freq):
 		return f1(freq)
 
+def compute_music_spec(spec,src_num,tf_config,win_size=50,step=50):
+	corr=estimate_spatial_correlation2(spec,win_size,step)
+	power=np.zeros((corr.shape[0],corr.shape[1],len(tf_config["tf"])),dtype=complex)
+	for frame, freq in np.ndindex((corr.shape[0],corr.shape[1])):
+		# normalize correlation
+		rxx=corr[frame,freq]
+		r=rxx/np.max(np.absolute(rxx))
+		#
+		#e_val,e_vec = np.linalg.eigh(corr[frame,freq])
+		e_val,e_vec = scipy.linalg.eig(r)
+		# sort 
+		eigen_id = np.argsort(e_val)[::-1]
+		e_val = e_val[eigen_id]
+		e_vec = e_vec[:,eigen_id]
+		e=e_vec[:,src_num:]
+		# directions
+		for k,v in tf_config["tf"].items():
+			a_vec=v["mat"][:,min_freq_bin+freq]
+			a_vec=a_vec/np.absolute(a_vec)
+			weight=A_characteristic((min_freq_bin+freq)*df)
+			#power[frame,freq,k]=weight*np.dot(a_vec.conj(),a_vec)/np.dot(np.dot(a_vec.conj(),ee),a_vec)
+			s=np.dot(a_vec.conj(),e)
+			power[frame,freq,k]=weight*np.dot(a_vec.conj(),a_vec)/np.dot(s,s.conj())
+	return power
+
 if __name__ == "__main__":
 	# argv check
 	if len(sys.argv)<3:
-		print >>sys.stderr, "Usage: sim_tf.py <in: tf.zip(HARK2 transfer function file)> <in: src.wav> <in:ch> <in:src theta> <in:volume> <out: dest.wav>"
+		print >>sys.stderr, "Usage: music.py <in: tf.zip(HARK2 transfer function file)> <in: src.wav>"
 		quit()
 	# read tf
 	npr.seed(1234)
@@ -130,45 +177,36 @@ if __name__ == "__main__":
 	
 	# reading data
 	fftLen = 512
-	step = fftLen / 4
+	step = 160 #fftLen / 4
 	df=fs*1.0/fftLen
 	# cutoff bin
-	min_freq=30
-	max_freq=2700
+	min_freq=300
+	max_freq=1000
 	min_freq_bin=int(np.ceil(min_freq/df))
 	max_freq_bin=int(np.floor(max_freq/df))
-	print "#min fft bin:",min_freq_bin
-	print "#max fft bin:",max_freq_bin
+	print "# min freq:",min_freq
+	print "# max freq:",max_freq
+	print "# min fft bin:",min_freq_bin
+	print "# max fft bin:",max_freq_bin
 
 	# apply transfer function
 	win = hamming(fftLen) # ハミング窓
 	spec=stft_mch(wav,win,step)
-	print spec.shape
 	spec=spec[:,:,min_freq_bin:max_freq_bin]
-	print spec.shape
-
-	corr=estimate_spatial_correlation(spec,50,1)
-	print corr.shape
-	src_num=1
-	power=np.zeros((corr.shape[0],corr.shape[1],len(tf_config["tf"])),dtype=complex)
-	for frame, freq in np.ndindex((corr.shape[0],corr.shape[1])):
-		e_val,e_vec = np.linalg.eigh(corr[frame,freq])
-		# sort 
-		eigen_id = np.argsort(e_val)[::-1]
-		e_val = e_val[eigen_id]
-		e_vec = e_vec[:,eigen_id]
-		e=e_vec[src_num:].T
-		ee=np.dot(e,e.conj().T)
-		for k,v in tf_config["tf"].items():
-			a_vec=v["mat"][:,min_freq_bin+freq]
-			weight=A_characteristic((min_freq_bin+freq)*df)
-			#power[frame,freq,k]=weight*np.dot(a_vec.conj(),a_vec)/np.dot(np.dot(a_vec.conj(),ee),a_vec)
-			power[frame,freq,k]=weight*np.absolute(np.dot(a_vec.conj(),a_vec))/np.sum(np.absolute(np.dot(a_vec,e)))
+	src_num=2
+	print "# src_num:",src_num
 	# power: frame, freq, direction_id
+	power=compute_music_spec(spec,src_num,tf_config,win_size=50,step=50)
 	p=np.sum(np.real(power),axis=1)
 	m_power=10*np.log10(p+1.0)
-	print m_power
-	np.savetxt("music.csv", m_power, delimiter=",")
+
+
+	# save
+	outfilename="music.npy"
+	np.save(outfilename,m_power)
+	#np.savetxt("music.csv", m_power, delimiter=",")
+	print "[save]",outfilename
+
 	# plot heat map
 	ax = sns.heatmap(m_power.transpose(),cbar=False,cmap=cm.Greys)
 	sns.plt.axis("off")
@@ -176,6 +214,25 @@ if __name__ == "__main__":
 	plt.tight_layout()
 	ax.tick_params(labelbottom='off')
 	ax.tick_params(labelleft='off')
-	sns.plt.savefig("music.png", bbox_inches="tight", pad_inches=0.0)
+	outfilename_heat="music.png"
+	sns.plt.savefig(outfilename_heat, bbox_inches="tight", pad_inches=0.0)
+	print "[save]",outfilename_heat
 
+	outfilename_heat_bar="music_bar.png"
+	sns.plt.clf()
+	sns.heatmap(m_power,cbar=True,cmap=cm.Greys)
+	sns.plt.savefig(outfilename_heat_bar, bbox_inches="tight", pad_inches=0.0)
+	sns.plt.clf()
+	print "[save]",outfilename_heat_bar
+	
+	outfilename_fft="fft.png"
+	x=(np.absolute(spec[0].T)**2)
+	ax = sns.heatmap(x[::-1,:],cbar=False,cmap='coolwarm')
+	sns.plt.axis("off")
+	sns.despine(fig=None, ax=None, top=False, right=False, left=False, bottom=False, offset=None, trim=False)
+	plt.tight_layout()
+	ax.tick_params(labelbottom='off')
+	ax.tick_params(labelleft='off')
+	sns.plt.savefig(outfilename_fft, bbox_inches="tight", pad_inches=0.0)
+	print "[save]",outfilename_fft
 
