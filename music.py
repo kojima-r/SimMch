@@ -17,29 +17,6 @@ import simmch
 from HARK_TF_Parser.read_mat import read_hark_tf
 from HARK_TF_Parser.read_param import read_hark_tf_param
 
-def stft_mch(data,win, step):
-	fftLen=len(win)
-	out_spec=[]
-	### STFT
-	for m in xrange(data.shape[0]):
-		spectrogram = simmch.stft(data[m,:], win, step)
-		spec=spectrogram[:, : fftLen / 2 + 1]
-		out_spec.append(spec)
-	mch_spec=np.stack(out_spec,axis=0)
-	return mch_spec
-
-def istft_mch(data,win, step):
-	fftLen=len(win)
-	out_wav=[]
-	### STFT
-	for m in xrange(data.shape[0]):
-		spec=data[m,:,:]
-		full_spec=simmch.make_full_spectrogram(spec)
-		resyn_wav = simmch.istft(full_spec, win, step)
-		out_wav.append(resyn_wav)
-	mch_wav=np.stack(out_wav,axis=0)
-	return mch_wav
-
 def slice_window(x, win_size, step):
 	l = x.shape[0]
 	N = win_size
@@ -123,7 +100,7 @@ f1=interpolate.interp1d(f,w,kind='cubic')
 def A_characteristic(freq):
 		return f1(freq)
 
-def compute_music_spec(spec,src_num,tf_config,win_size=50,step=50):
+def compute_music_spec(spec,src_num,tf_config,df,min_freq_bin=0,win_size=50,step=50):
 	corr=estimate_spatial_correlation2(spec,win_size,step)
 	power=np.zeros((corr.shape[0],corr.shape[1],len(tf_config["tf"])),dtype=complex)
 	for frame, freq in np.ndindex((corr.shape[0],corr.shape[1])):
@@ -191,12 +168,12 @@ if __name__ == "__main__":
 
 	# apply transfer function
 	win = hamming(fftLen) # ハミング窓
-	spec=stft_mch(wav,win,step)
-	spec=spec[:,:,min_freq_bin:max_freq_bin]
+	spec=simmch.stft_mch(wav,win,step)
+	spec_m=spec[:,:,min_freq_bin:max_freq_bin]
 	src_num=2
 	print "# src_num:",src_num
 	# power: frame, freq, direction_id
-	power=compute_music_spec(spec,src_num,tf_config,win_size=50,step=50)
+	power=compute_music_spec(spec_m,src_num,tf_config,df,min_freq_bin,win_size=50,step=50)
 	p=np.sum(np.real(power),axis=1)
 	m_power=10*np.log10(p+1.0)
 

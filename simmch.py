@@ -109,3 +109,28 @@ def make_full_spectrogram(spec):
 	spec_c=np.conjugate(spec[:,:0:-1])
 	out_spec=np.c_[spec,spec_c[:,1:]]
 	return out_spec
+
+def stft_mch(data,win, step):
+	fftLen=len(win)
+	out_spec=[]
+	### STFT
+	for m in xrange(data.shape[0]):
+		spectrogram = stft(data[m,:], win, step)
+		spec=spectrogram[:, : fftLen / 2 + 1]
+		out_spec.append(spec)
+	mch_spec=np.stack(out_spec,axis=0)
+	return mch_spec
+
+def istft_mch(data,win, step):
+	fftLen=len(win)
+	out_wav=[]
+	### STFT
+	for m in xrange(data.shape[0]):
+		spec=data[m,:,:]
+		full_spec=make_full_spectrogram(spec)
+		resyn_wav = istft(full_spec, win, step)
+		out_wav.append(resyn_wav)
+	mch_wav=np.stack(out_wav,axis=0)
+	return mch_wav
+
+
