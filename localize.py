@@ -265,10 +265,10 @@ if __name__ == "__main__":
 		print "[save]",outfilename_heat,m_power.shape
 
 
-	if options.plot_h_file is not None:
+	if options.plot_hb_file is not None:
 		sns.plt.clf()
 		sns.heatmap(m_power,cbar=True,cmap=cm.Greys)
-		outfilename_heat_bar=options.plt_hb_file
+		outfilename_heat_bar=options.plot_hb_file
 		sns.plt.savefig(outfilename_heat_bar, bbox_inches="tight", pad_inches=0.0)
 		sns.plt.clf()
 		print "[save]",outfilename_heat_bar,m_power.shape
