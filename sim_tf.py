@@ -19,24 +19,6 @@ from HARK_TF_Parser.read_param import read_hark_tf_param
 # gen_random_source(num,near,far,num_type)
 # [{"distance":d,"azimuth":theta,"elevation":0,"type":type_id}]
 
-def nearest_direction_index(tf_config,theta):
-	nearest_theta=math.pi
-	nearest_index=None
-	for key_index,value in tf_config["tf"].items():
-		pos=value["position"]
-		th=math.atan2(pos[1],pos[0])# -pi ~ pi
-		dtheta=abs(theta-th)
-		if dtheta>2*math.pi:
-			dtheta-=2*math.pi
-		
-		if dtheta>math.pi:
-			dtheta=2*math.pi-dtheta
-		if dtheta<nearest_theta:
-			nearest_theta=dtheta
-			nearest_index=key_index
-
-	return nearest_index
-
 def make_noise(x):
 	rad=(npr.rand()*2*math.pi)
 	return (math.cos(rad)+1j*math.sin(rad))
@@ -84,7 +66,7 @@ if __name__ == "__main__":
 	tf_config=read_hark_tf(tf_filename)
 	target_ch=int(sys.argv[3])
 	src_theta=float(sys.argv[4])/180.0*math.pi
-	src_index=nearest_direction_index(tf_config,src_theta)
+	src_index=simmch.nearest_direction_index(tf_config,src_theta)
 	src_volume=float(sys.argv[5])
 	output_filename=sys.argv[6]
 	if not src_index in tf_config["tf"]:

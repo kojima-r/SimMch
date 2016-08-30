@@ -26,7 +26,14 @@ if __name__ == "__main__":
 		default=1.0,
 		type=str,
 		metavar="VOL")
+	parser.add_option(
+		"-N", "--normalize", dest="normalization",
+		help="volumes of input sound (0<=v<=1), comma separated",
+		default=None,
+		type=str,
+		metavar="G")
 	
+
 	(options, args) = parser.parse_args()
 	
 	# argv check
@@ -59,13 +66,24 @@ if __name__ == "__main__":
 			wav_length=wav_info[0].shape[1]
 	print "... mixing"
 	mix_wavdata=np.zeros((nch,wav_length),dtype="float")
-	for wav_info in data:
+	normalization=None
+	if options.normalization is not None:
+		arr=options.normalization.split(",")
+		normalization=map(float,arr)
+
+	for i, wav_info in enumerate(data):
 		l=wav_info[0].shape[1]
-		mix_wavdata[:,:l]+=wav_info[0].astype("float")
+		wav=wav_info[0].astype("float")
+		if normalization is not None:
+			v=normalization[i]
+			amp=np.max(np.abs(wav))
+			print "[INFO] max amplitude:",amp,"->",v
+			wav=wav*v/amp
+		mix_wavdata[:,:l]+=wav
 	amp=np.max(np.abs(mix_wavdata))
 	print "[INFO] max amplitude:",amp
 	g=32767.0/amp*src_volume
-	print "[INFO] gain:",g
+	print "[INFO] scaling gain:",g
 	mix_wavdata*=g
 	# save data
 	if output_filename!=None:

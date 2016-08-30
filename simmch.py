@@ -91,7 +91,7 @@ def read_mch_wave(filename):
 def save_mch_wave(mix_wavdata,output_filename,sample_width=2,params=None,framerate=16000):
 	a_wavdata=mix_wavdata.transpose()
 	out_wavdata = a_wavdata.copy(order='C')
-	print "# save data:",out_wavdata.shape
+	print "# save data:",output_filename,out_wavdata.shape
 	ww = wave.Wave_write(output_filename)
 	if params!=None:
 		ww.setparams(params)
@@ -100,7 +100,10 @@ def save_mch_wave(mix_wavdata,output_filename,sample_width=2,params=None,framera
 			ww.setframerate(framerate)
 		if sample_width!=None:
 			ww.setsampwidth(sample_width)
-	ww.setnchannels(out_wavdata.shape[1])
+	if len(out_wavdata.shape)<=1:
+		ww.setnchannels(1)
+	else:
+		ww.setnchannels(out_wavdata.shape[1])
 	ww.setnframes(out_wavdata.shape[0])
 	ww.writeframes(array.array('h', out_wavdata.astype("int16").ravel()).tostring())
 	ww.close()
@@ -132,5 +135,23 @@ def istft_mch(data,win, step):
 		out_wav.append(resyn_wav)
 	mch_wav=np.stack(out_wav,axis=0)
 	return mch_wav
+
+def nearest_direction_index(tf_config,theta):
+	nearest_theta=math.pi
+	nearest_index=None
+	for key_index,value in tf_config["tf"].items():
+		pos=value["position"]
+		th=math.atan2(pos[1],pos[0])# -pi ~ pi
+		dtheta=abs(theta-th)
+		if dtheta>2*math.pi:
+			dtheta-=2*math.pi
+		
+		if dtheta>math.pi:
+			dtheta=2*math.pi-dtheta
+		if dtheta<nearest_theta:
+			nearest_theta=dtheta
+			nearest_index=key_index
+
+	return nearest_index
 
 
