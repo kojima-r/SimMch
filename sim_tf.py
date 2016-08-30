@@ -28,19 +28,18 @@ def apply_tf(data,fftLen, step,tf_config,src_index,noise_amp=0):
 	### STFT
 	spectrogram = simmch.stft(data, win, step)
 	spec=spectrogram[:, : fftLen / 2 + 1]
-	#print spectrogram[7000, :]
-	#[4,3,2,1,2*,3*]
+	#spec = [4,3,2,1,2*,3*]
 	### Apply TF
 	tf=tf_config["tf"][src_index]
-	print "# position:",tf["position"]
+	#print "# position:",tf["position"]
 	pos=tf["position"]
 	th=math.atan2(pos[1],pos[0])# -pi ~ pi
-	print "# theta(deg):",th/math.pi*180
+	#print "# theta(deg):",th/math.pi*180
 	out_wavdata=[]
 	for mic_index in xrange(tf["mat"].shape[0]):
 		tf_mono=tf["mat"][mic_index]
-		print "# src spectrogram:",spec.shape
-		print "# tf spectrogram:",tf_mono.shape
+		#print "# src spectrogram:",spec.shape
+		#print "# tf spectrogram:",tf_mono.shape
 		tf_spec=spec*tf_mono
 		spec_c=np.conjugate(tf_spec[:,:0:-1])
 		out_spec=np.c_[tf_spec,spec_c[:,1:]]
@@ -63,44 +62,44 @@ if __name__ == "__main__":
 	#
 	npr.seed(1234)
 	tf_filename=sys.argv[1]
-	tf_config=read_hark_tf(tf_filename)
+	wav_filename=sys.argv[2]
 	target_ch=int(sys.argv[3])
 	src_theta=float(sys.argv[4])/180.0*math.pi
-	src_index=simmch.nearest_direction_index(tf_config,src_theta)
 	src_volume=float(sys.argv[5])
 	output_filename=sys.argv[6]
+	
+	## read tf 
+	print "... reading", tf_filename
+	tf_config=read_hark_tf(tf_filename)
+	mic_pos=read_hark_tf_param(tf_filename)
+	src_index=simmch.nearest_direction_index(tf_config,src_theta)
+	print "# mic positions  :",mic_pos
+	print "# direction index:",src_index
 	if not src_index in tf_config["tf"]:
 		print >>sys.stderr, "Error: tf index",src_index,"does not exist in TF file"
 		quit()
-	mic_pos=read_hark_tf_param(tf_filename)
-	print "# mic positions:",mic_pos
-	wav_filename=sys.argv[2]
-	wr = wave.open(wav_filename, "rb")
-
-	# print info
-	print "# channel num : ", wr.getnchannels()
-	print "# sample size : ", wr.getsampwidth()
-	print "# sampling rate : ", wr.getframerate()
-	print "# frame num : ", wr.getnframes()
-	print "# params : ", wr.getparams()
-	print "# sec : ", float(wr.getnframes()) / wr.getframerate()
 	
-	# reading data
-	data = wr.readframes(wr.getnframes())
-	nch=wr.getnchannels()
-	wavdata = np.frombuffer(data, dtype= "int16")
-	fs=wr.getframerate()
-	mono_wavdata = wavdata[target_ch::nch]
-	wr.close()
-	
-	data = mono_wavdata
 
+	## read wav file
+	print "... reading", wav_filename
+	wav_data=simmch.read_mch_wave(wav_filename)
+	scale=32767.0
+	wav=wav_data["wav"]/scale
+	fs=wav_data["framerate"]
+	nch=wav_data["nchannels"]
+	## print info
+	print "# channel num : ", nch
+	print "# sample size : ", wav.shape
+	print "# sampling rate : ", fs
+	print "# sec : ", wav_data["duration"]
+	mono_wavdata = wav[0,:]
+
+	## apply TF
 	fftLen = 512
 	step = fftLen / 4
-	# apply transfer function
-	mch_wavdata=apply_tf(data,fftLen, step,tf_config,src_index)
-	mch_wavdata=mch_wavdata*src_volume
-	# save data
-	simmch.save_mch_wave(mch_wavdata,output_filename,params=wr.getparams())
+	mch_wavdata=apply_tf(mono_wavdata,fftLen, step,tf_config,src_index)
+	mch_wavdata=mch_wavdata*scale*src_volume
+	## save data
+	simmch.save_mch_wave(mch_wavdata,output_filename)
 
 
