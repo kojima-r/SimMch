@@ -23,7 +23,7 @@ def make_noise(x):
 	rad=(npr.rand()*2*math.pi)
 	return (math.cos(rad)+1j*math.sin(rad))
 
-def apply_tf(data,fftLen, step,tf_config,src_index,noise_amp=0):
+def apply_tf_spec(data,fftLen, step,tf_config,src_index,noise_amp=0):
 	win = hamming(fftLen) # ハミング窓
 	### STFT
 	spectrogram = simmch.stft(data, win, step)
@@ -35,7 +35,7 @@ def apply_tf(data,fftLen, step,tf_config,src_index,noise_amp=0):
 	pos=tf["position"]
 	th=math.atan2(pos[1],pos[0])# -pi ~ pi
 	#print "# theta(deg):",th/math.pi*180
-	out_wavdata=[]
+	out_data=[]
 	for mic_index in xrange(tf["mat"].shape[0]):
 		tf_mono=tf["mat"][mic_index]
 		#print "# src spectrogram:",spec.shape
@@ -47,8 +47,19 @@ def apply_tf(data,fftLen, step,tf_config,src_index,noise_amp=0):
 		v_make_noise = np.vectorize(make_noise)
 		noise_spec=v_make_noise(noise_spec)
 		out_spec=out_spec+noise_amp*noise_spec
+		out_data.append(out_spec)
+	mch_data=np.array(out_data)
+	return mch_data
+
+
+def apply_tf(data,fftLen, step,tf_config,src_index,noise_amp=0):
+	win = hamming(fftLen) # ハミング窓
+	mch_data=apply_tf_spec(data,fftLen, step,tf_config,src_index,noise_amp)
+	out_wavdata=[]
+	for mic_index in xrange(mch_data.shape[0]):
+		spec=mch_data[mic_index]
 		### iSTFT
-		resyn_data = simmch.istft(out_spec, win, step)
+		resyn_data = simmch.istft(spec, win, step)
 		out_wavdata.append(resyn_data)
 	# concat waves
 	mch_wavdata=np.vstack(out_wavdata)

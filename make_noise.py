@@ -22,7 +22,7 @@ def rand_noise(x):
 	rad=(npr.rand()*2*math.pi)
 	return (math.cos(rad)+1j*math.sin(rad))
 
-def make_white_noise(nch,length,fftLen,step):
+def make_white_noise_freq(nch,length,fftLen,step):
 	# stft length <-> samples
 	src_volume=1
 	data=np.zeros((nch,int(length),fftLen/2+1),dtype = complex64)
@@ -31,16 +31,32 @@ def make_white_noise(nch,length,fftLen,step):
 	
 	#win = hamming(fftLen) # ハミング窓
 	win = np.array([1.0]*fftLen)
-	out_wavdata=[]
+	out_data=[]
 	for mic_index in xrange(data.shape[0]):
 		spec=data[mic_index]
 		full_spec=simmch.make_full_spectrogram(spec)
-		s_sum=np.mean(np.abs(full_spec)**2,axis=1)
+		#s_sum=np.mean(np.abs(full_spec)**2,axis=1)
 		#print "[CHECK] power(spec/frame):",np.mean(s_sum)
+		out_data.append(full_spec)
+	# concat waves
+	mch_data=np.array(out_data)
+	return mch_data
+
+
+def make_white_noise(nch,length,fftLen,step):
+	# stft length <-> samples
+	src_volume=1
+	data=make_white_noise_freq(nch,length,fftLen,step)
+	
+	#win = hamming(fftLen) # ハミング窓
+	win = np.array([1.0]*fftLen)
+	out_wavdata=[]
+	for mic_index in xrange(data.shape[0]):
+		spec=data[mic_index]
 		### iSTFT
-		resyn_data = simmch.istft(full_spec, win, step)
-		x=simmch.apply_window(resyn_data, win, step)
-		w_sum=np.sum(x**2,axis=1)
+		resyn_data = simmch.istft(spec, win, step)
+		#x=simmch.apply_window(resyn_data, win, step)
+		#w_sum=np.sum(x**2,axis=1)
 		#print "[CHECK] power(x/frame):",np.mean(w_sum)
 		out_wavdata.append(resyn_data)
 	# concat waves
@@ -123,7 +139,7 @@ if __name__ == "__main__":
 	# save data
 	nch=options.channel
 	fftLen = 512
-	step = fftLen
+	step = fftLen/4
 	nsamples=None
 	if options.samples!=None:
 		nsamples=options.samples
