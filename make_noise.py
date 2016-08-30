@@ -18,10 +18,35 @@ from simmch import nearest_direction_index
 
 from optparse import OptionParser
 
-def make_noise(x):
+def rand_noise(x):
 	rad=(npr.rand()*2*math.pi)
 	return (math.cos(rad)+1j*math.sin(rad))
 
+def make_white_noise(nch,length,fftLen,step):
+	# stft length <-> samples
+	src_volume=1
+	data=np.zeros((nch,int(length),fftLen/2+1),dtype = complex64)
+	v_make_noise = np.vectorize(rand_noise)
+	data=v_make_noise(data)
+	
+	#win = hamming(fftLen) # ハミング窓
+	win = np.array([1.0]*fftLen)
+	out_wavdata=[]
+	for mic_index in xrange(data.shape[0]):
+		spec=data[mic_index]
+		full_spec=simmch.make_full_spectrogram(spec)
+		s_sum=np.mean(np.abs(full_spec)**2,axis=1)
+		#print "[CHECK] power(spec/frame):",np.mean(s_sum)
+		### iSTFT
+		resyn_data = simmch.istft(full_spec, win, step)
+		x=simmch.apply_window(resyn_data, win, step)
+		w_sum=np.sum(x**2,axis=1)
+		#print "[CHECK] power(x/frame):",np.mean(w_sum)
+		out_wavdata.append(resyn_data)
+	# concat waves
+	mch_wavdata=np.vstack(out_wavdata)
+	amp=np.max(np.abs(mch_wavdata))
+	return mch_wavdata/amp
 
 if __name__ == "__main__":
 	usage = 'usage: %s [options] <out: dest.wav>' % sys.argv[0]
@@ -120,34 +145,13 @@ if __name__ == "__main__":
 		print >>sys.stderr,"[ERROR] unknown duration (please indicate --duration, --samples, or --frames)"
 		quit()
 
-	# stft length <-> samples
-	src_volume=1
-	data=np.zeros((nch,int(length),fftLen/2+1),dtype = complex64)
-	v_make_noise = np.vectorize(make_noise)
-	data=v_make_noise(data)
 	print "#channels:",nch
 	print "#frames:",length
 	print "#samples:",nsamples
 	print "window size:",fftLen
-	#win = hamming(fftLen) # ハミング窓
-	win = np.array([1.0]*fftLen)
-	out_wavdata=[]
-	for mic_index in xrange(data.shape[0]):
-		spec=data[mic_index]
-		full_spec=simmch.make_full_spectrogram(spec)
-		s_sum=np.mean(np.abs(full_spec)**2,axis=1)
-		print "[CHECK] power(spec/frame):",np.mean(s_sum)
-		### iSTFT
-		resyn_data = simmch.istft(full_spec, win, step)
-		x=simmch.apply_window(resyn_data, win, step)
-		w_sum=np.sum(x**2,axis=1)
-		print "[CHECK] power(x/frame):",np.mean(w_sum)
-		out_wavdata.append(resyn_data)
-	# concat waves
-	mch_wavdata=np.vstack(out_wavdata)
-	amp=np.max(np.abs(mch_wavdata))
-	print "[INFO] temporal max amplitude:",amp
-	g=32767.0/amp*options.amp
+	mch_wavdata=make_white_noise(nch,length,fftLen,step)
+	
+	g=32767.0*options.amp
 	print "[INFO] gain:",g
 	mch_wavdata=mch_wavdata*g
 	simmch.save_mch_wave(mch_wavdata,output_filename,sample_width=2,framerate=options.samplingrate)
