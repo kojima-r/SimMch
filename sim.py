@@ -11,7 +11,7 @@ import math
 from HARK_TF_Parser.read_mat import read_hark_tf
 from HARK_TF_Parser.read_param import read_hark_tf_param
 from sim_tf import apply_tf
-from sim_tf import nearest_direction_index
+from simmch import nearest_direction_index
 
 from optparse import OptionParser
 

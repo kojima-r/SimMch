@@ -1,25 +1,21 @@
 # -*- coding: utf-8 -*-
 import sys
 import numpy as np
-import numpy.random as npr
 from scipy import hamming,interpolate
-import scipy
+import json
+import argparse
 
 import matplotlib
 matplotlib.use('Agg')
-import sys
-import numpy as np; np.random.seed(0)
 import seaborn as sns; sns.set()
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-import json
 
 import simmch
 from HARK_TF_Parser.read_mat import read_hark_tf
 from HARK_TF_Parser.read_param import read_hark_tf_param
 import music
 
-from optparse import OptionParser
 
 def detect_island(vec):
 	o=[]
@@ -65,229 +61,106 @@ def detect_peak(vec):
 	return peaks
 
 if __name__ == "__main__":
-	usage = 'usage: %s tf [options] <in: src.wav> <out: dest.wav>' % sys.argv[0]
-	parser = OptionParser()
-	
-	parser.add_option(
-		"--min-freq", dest="min_freq",
-		help="minimum frequency (Hz)",
-		default=2000,
-		type=float,
-		metavar="F")
 
-	parser.add_option(
-		"--max-freq", dest="max_freq",
-		help="maximum frequency (Hz)",
-		default=8000,
-		type=float,
-		metavar="F")
-	
-	parser.add_option(
-		"--thresh", dest="thresh",
-		help="threshold of MUSIC power spectrogram",
-		default=None,
-		type=float,
-		metavar="F")
-
-	parser.add_option(
-		"--src-num", dest="src_num",
-		help="number of sound source (for MUSIC)",
-		default=2,
-		type=int,
-		metavar="N")
-	
-	parser.add_option(
-		"--stft-win", dest="stft_win",
-		help="window size for STFT",
-		default=512,
-		type=int,
-		metavar="W")
-
-	parser.add_option(
-		"--stft-adv", dest="stft_adv",
-		help="advance step size for STFT",
-		default=160,
-		type=int,
-		metavar="W")
-
-	parser.add_option(
-		"--music-win", dest="music_win",
-		help="window size for MUSIC",
-		default=50,
-		type=int,
-		metavar="W")
-
-	parser.add_option(
-		"--music-adv", dest="music_adv",
-		help="advance step size for MUSIC",
-		default=50,
-		type=int,
-		metavar="W")
-
-	parser.add_option(
-		"--event-min-size", dest="event_min_size",
-		help="minimum event size (MUSIC frame)",
-		default=3,
-		type=int,
-		metavar="W")
-
-	parser.add_option(
-		"--out-npy",
-		dest="npy_file",
-		help="[output] numpy MUSIC spectrogram file (dB :same with HARK)",
-		default=None,
-		type=str,
-		metavar="FILE")
-
-	parser.add_option(
-		"--out-full-npy",
-		dest="npy_full_file",
-		help="[output] numpy MUSIC spectrogram file for each frequency bin (raw spectrogram)",
-		default=None,
-		type=str,
-		metavar="FILE")
-
-
-	parser.add_option(
-		"--out-loc",
-		dest="loc_file",
-		help="[output] localization file(.json)",
-		default=None,
-		type=str,
-		metavar="FILE")
-	
-
-	parser.add_option(
-		"--plot-h",
-		dest="plot_h_file",
-		help="[output] heatmap file",
-		default=None,
-		type=str,
-		metavar="FILE")
-	
-	parser.add_option(
-		"--plot-hb",
-		dest="plot_hb_file",
-		help="[output] heatmap file with bar",
-		default=None,
-		type=str,
-		metavar="FILE")
-	
-	parser.add_option(
-		"--plot-fft",
-		dest="plot_fft_file",
-		help="[output] spectrogram",
-		default=None,
-		type=str,
-		metavar="FILE")
-
-
-	(options, args) = parser.parse_args()
-	
 	# argv check
-	if len(args)<2:
-		print >>sys.stderr, "Usage: music.py <in: tf.zip(HARK2 transfer function file)> <in: src.wav>"
+	parser = argparse.ArgumentParser(description='applying the MUSIC method to am-ch wave file')
+	#### option for the MUSIC method
+	parser.add_argument('tf_filename', metavar='TF_FILE', type=str, 
+			help='HARK2.0 transfer function file (.zip)')
+	parser.add_argument('wav_filename', metavar='WAV_FILE', type=str, 
+			help='target wav file')
+	parser.add_argument('--normalize_factor', metavar='V', type=int, default=32768.0,
+			help='normalize factor for the given wave data(default=sugned 16bit)')
+	parser.add_argument('--stft_win_size', metavar='S', type=int,default=512,
+			help='window sise for STFT')
+	parser.add_argument('--stft_step', metavar='S', type=int, default=128,
+			help='advance step size for STFT (c.f. overlap=fftLen-step)')
+	parser.add_argument('--min_freq', metavar='F', type=float,default=300,
+			help='minimum frequency of MUSIC spectrogram (Hz)')
+	parser.add_argument('--max_freq', metavar='F', type=float,default=8000,
+			help='maximum frequency of MUSIC spectrogram (Hz)')
+	parser.add_argument('--music_win_size', metavar='S', type=int, default=50,
+			help='block size to compute a correlation matrix for the MUSIC method (frame)')
+	parser.add_argument('--music_step', metavar='S', type=int, default=50,
+			help='advanced step block size (i.e. frequency of computing MUSIC spectrum) (frame)')
+	parser.add_argument('--music_src_num', metavar='N', type=int, default=3,
+			help='the number of sound source candidates  (i.e. # of dimensions of the signal subspaces)')
+	parser.add_argument('--out_npy', metavar='NPY_FILE', type=str,  default=None,
+			help='[output] numpy file to save MUSIC spectrogram (time,direction=> power)')
+	parser.add_argument('--out_full_npy', metavar='NPY_FILE', type=str,  default=None,
+			help='[output] numpy file to save MUSIC spectrogram (time,frequency,direction=> power')
+	parser.add_argument('--out_fig', metavar='FIG_FILE', type=str,  default=None,
+			help='[output] fig file to save MUSIC spectrogram (.png)')
+	parser.add_argument('--out_fig_with_bar', metavar='FIG_FILE', type=str, default=None,
+			help='[output] fig file to save MUSIC spectrogram with color bar(.png)')
+	parser.add_argument('--out_spectrogram', metavar='FIG_FILE', type=str, default=None,
+			help='[output] fig file to save power spectrogram (first channel) (.png)')
+	parser.add_argument('--out_setting', metavar='SETTING_FILE', type=str, default=None,
+			help='[output] stting file (.json)')
+	####
+	parser.add_argument('--thresh',metavar='F',type=float,default=None,
+			help="threshold of MUSIC power spectrogram")
+	parser.add_argument('--event_min_size', metavar="W", type=int, default=3,
+			help="minimum event size (MUSIC frame)")
+	parser.add_argument('--out_localization', metavar='LOC_FILE', type=str, default=None,
+			help='[output] localization file(.json)')
+
+	args = parser.parse_args()
+	if not args:
 		quit()
 	#
 	# read tf
-	npr.seed(1234)
-	tf_filename=args[0]
-	tf_config=read_hark_tf(tf_filename)
-	mic_pos=read_hark_tf_param(tf_filename)
-	print "# mic positions:",mic_pos
-	# read wav
-	wav_filename=args[1]
-	print "... reading", wav_filename
-	wav_data=simmch.read_mch_wave(wav_filename)
-	wav=wav_data["wav"]/32767.0
-	fs=wav_data["framerate"]
-	nch=wav_data["nchannels"]
-	# print info
-	print "# channel num : ", nch
-	print "# sample size : ", wav.shape
-	print "# sampling rate : ", fs
-	print "# sec : ", wav_data["duration"]
+	print "... reading", args.tf_filename
+	tf_config=read_hark_tf(args.tf_filename)
 	
-	# reading data
-	fftLen = options.stft_win
-	step = options.stft_adv #fftLen / 4
-	df=fs*1.0/fftLen
-	step_ms = fs/step
-	# cutoff bin
-	min_freq=options.min_freq
-	max_freq=options.max_freq
-	min_freq_bin=int(np.ceil(min_freq/df))
-	max_freq_bin=int(np.floor(max_freq/df))
-	print "# min freq:",min_freq
-	print "# max freq:",max_freq
-	print "# min fft bin:",min_freq_bin
-	print "# max fft bin:",max_freq_bin
-
-	# apply transfer function
-	win = hamming(fftLen) # ハミング窓
-	spec=simmch.stft_mch(wav,win,step)
-	spec_m=spec[:,:,min_freq_bin:max_freq_bin]
-	src_num=options.src_num
-	print "# src_num:",src_num
-
-	# power: frame, freq, direction_id
-	music_win=options.music_win
-	music_step=options.music_adv
-	music_step_ms=music_step*step_ms
-	power=music.compute_music_spec(spec_m,src_num,tf_config,df,min_freq_bin,win_size=music_win,step=music_step)
-	p=np.sum(np.real(power),axis=1)
-	m_power=10*np.log10(p+1.0)
-
-	# save
-	if options.npy_file is not None:
-		outfilename=options.npy_file
+	# print positions of microphones
+	#mic_pos=read_hark_tf_param(args.tf_filename)
+	#print "# mic positions:",mic_pos
+	
+	spec,m_power,m_full_power,setting=music.compute_music_power(
+			args.wav_filename,
+			tf_config,
+			args.normalize_factor,
+			args.stft_win_size,
+			args.stft_step,
+			args.min_freq,
+			args.max_freq,
+			args.music_src_num,
+			args.music_win_size,
+			args.music_step)
+	
+	# save setting
+	if args.out_setting:
+		outfilename=args.out_setting
+		fp = open(outfilename, "w")
+		json.dump(setting,fp, sort_keys=True, indent=2)
+		print "[save]",outfilename
+	# save MUSIC spectrogram
+	if args.out_npy:
+		outfilename=args.out_npy
 		np.save(outfilename,m_power)
-		#np.savetxt("music.csv", m_power, delimiter=",")
-		print "[save]",outfilename,m_power.shape
-
-	if options.npy_full_file is not None:
-		outfilename=options.npy_full_file
-		np.save(outfilename,power)
-		#np.savetxt("music.csv", m_power, delimiter=",")
-		print "[save]",outfilename,power.shape
+		print "[save]",outfilename
+	# save MUSIC spectrogram for each freq.
+	if args.out_full_npy:
+		outfilename=args.out_full_npy
+		np.save(outfilename,m_full_power)
+		print "[save]",outfilename
+	# plot heat map
+	if args.out_fig:
+		save_heatmap_music_spec(args.out_fig,m_power)
+	# plot heat map with color bar
+	if args.out_fig_with_bar:
+		save_heatmap_music_spec_with_bar(args.out_fig_with_bar,m_power)
+	# plot spectrogram
+	if args.out_spectrogram:
+		save_spectrogram(args.out_spectrogram,spec,ch=0)
 	
-
-	if options.plot_h_file is not None:
-		# plot heat map
-		ax = sns.heatmap(m_power.transpose(),cbar=False,cmap=cm.Greys)
-		sns.plt.axis("off")
-		sns.despine(fig=None, ax=None, top=False, right=False, left=False, bottom=False, offset=None, trim=False)
-		plt.tight_layout()
-		ax.tick_params(labelbottom='off')
-		ax.tick_params(labelleft='off')
-		outfilename_heat=options.plot_h_file
-		sns.plt.savefig(outfilename_heat, bbox_inches="tight", pad_inches=0.0)
-		print "[save]",outfilename_heat,m_power.shape
-
-
-	if options.plot_hb_file is not None:
-		sns.plt.clf()
-		sns.heatmap(m_power,cbar=True,cmap=cm.Greys)
-		outfilename_heat_bar=options.plot_hb_file
-		sns.plt.savefig(outfilename_heat_bar, bbox_inches="tight", pad_inches=0.0)
-		sns.plt.clf()
-		print "[save]",outfilename_heat_bar,m_power.shape
-
-	
-	if options.plot_fft_file is not None:
-		outfilename_fft=options.plot_fft_file
-		x=(np.absolute(spec[0].T)**2)
-		ax = sns.heatmap(x[::-1,:],cbar=False,cmap='coolwarm')
-		sns.plt.axis("off")
-		sns.despine(fig=None, ax=None, top=False, right=False, left=False, bottom=False, offset=None, trim=False)
-		plt.tight_layout()
-		ax.tick_params(labelbottom='off')
-		ax.tick_params(labelleft='off')
-		sns.plt.savefig(outfilename_fft, bbox_inches="tight", pad_inches=0.0)
-		print "[save]",outfilename_fft
+	####
+	#### Detection part
+	####
 
 	# threshold
-	threshold=options.thresh
+	threshold=args.thresh
 	def threshold_filter(x):
 		if x<threshold:
 			return 0
@@ -321,6 +194,7 @@ if __name__ == "__main__":
 	for t in xrange(len(peak_tl)-1):
 		p1s=peak_tl[t]
 		p2s=peak_tl[t+1]
+		# search combination of peaks 
 		for i1,p1 in enumerate(p1s):
 			nearest_p2=None
 			for i2,p2 in enumerate(p2s):
@@ -360,7 +234,7 @@ if __name__ == "__main__":
 				id_counter[evt[3]]+=1
 	print "# event counting( ID => count ):",id_counter
 	# cut off & re-set id
-	event_min_size=options.event_min_size
+	event_min_size=args.event_min_size
 	print "# cut off: minimum event size:",event_min_size
 	reset_id_counter={}
 	tl_objs=[]
@@ -383,11 +257,11 @@ if __name__ == "__main__":
 	for o in tl_objs:
 		print o
 	save_obj={
-			"interval":music_step_ms,
+			"interval":setting["music_step_ms"],
 			"tl":tl_objs
 			}
-	if options.loc_file is not None:
-		filename=options.loc_file
+	if args.out_localization is not None:
+		filename=args.out_localization
 		print "[save]",filename
 		with open(filename, 'w') as f:
 			json.dump(save_obj, f)

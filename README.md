@@ -25,6 +25,14 @@ $ ./setup.sh
 - const_sep.py
 HARKを呼び出して、固定方向からの音を分離する
 
+
+# MUSIC 
+```
+python music.py  ./sample/tamago_rectf.zip  ./sample/jinsei_tanosii.wav --out_npy test.npy --out_full_n
+py test.npy --out_fig ./music.png --out_fig_with_bar ./music_bar.png --out_spectrogram ./fft.png 
+```
+
+
 # そのほかのスクリプトファイル
 - simmch.py
 本プロジェクトで使われているユーティリティ関数

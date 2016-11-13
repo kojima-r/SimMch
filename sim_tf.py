@@ -109,6 +109,8 @@ if __name__ == "__main__":
 	fftLen = 512
 	step = fftLen / 4
 	mch_wavdata=apply_tf(mono_wavdata,fftLen, step,tf_config,src_index)
+	a=np.max(mch_wavdata)
+	mch_wavdata=mch_wavdata/a
 	mch_wavdata=mch_wavdata*scale*src_volume
 	## save data
 	simmch.save_mch_wave(mch_wavdata,output_filename)
