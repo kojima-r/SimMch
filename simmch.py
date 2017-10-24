@@ -136,22 +136,49 @@ def istft_mch(data,win, step):
 	mch_wav=np.stack(out_wav,axis=0)
 	return mch_wav
 
+def diff_direction(theta,th):
+	dtheta=abs(theta-th)
+	if dtheta>2*math.pi:
+		dtheta-=2*math.pi
+	if dtheta>math.pi:
+		dtheta=2*math.pi-dtheta
+	return dtheta
+
 def nearest_direction_index(tf_config,theta):
 	nearest_theta=math.pi
 	nearest_index=None
 	for key_index,value in tf_config["tf"].items():
 		pos=value["position"]
 		th=math.atan2(pos[1],pos[0])# -pi ~ pi
-		dtheta=abs(theta-th)
-		if dtheta>2*math.pi:
-			dtheta-=2*math.pi
-		
-		if dtheta>math.pi:
-			dtheta=2*math.pi-dtheta
+		dtheta=diff_direction(theta,th)
 		if dtheta<nearest_theta:
 			nearest_theta=dtheta
 			nearest_index=key_index
 
 	return nearest_index
+
+def nearest_position_index(tf_config,target_pos):
+	nearest_index=None
+	nearest_d=None
+	for key_index,value in tf_config["tf"].items():
+		pos=value["position"]
+		d=np.sum((pos-target_pos)**2)
+		if nearest_d is None or d<nearest_d:
+			nearest_d=d
+			nearest_index=key_index
+	return nearest_index
+
+
+
+def range_direction_index(tf_config,theta,range_theta):
+	nearest_theta=math.pi
+	ret_indeces=[]
+	for key_index,value in tf_config["tf"].items():
+		pos=value["position"]
+		th=math.atan2(pos[1],pos[0])# -pi ~ pi
+		dtheta=diff_direction(theta,th)
+		if dtheta<=range_theta:
+			ret_indeces.append(key_index)
+	return ret_indeces
 
 
