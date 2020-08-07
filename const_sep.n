@@ -31,7 +31,7 @@
     <Node name="node_sub_separation_1" type="sub_separation" x="720" y="220">
     </Node>
     <Node name="node_ConstantLocalization_1" type="ConstantLocalization" x="470" y="290">
-      <Parameter name="ANGLES" type="object" value="&lt;Vector&lt;float&gt; 0.0 90.0 &gt;" description="A vector to specify source locations. Each vector element shows azimuth of a source in degree."/>
+      <Parameter name="ANGLES" type="object" value="&lt;Vector&lt;float&gt; 90.0 0.0 &gt;" description="A vector to specify source locations. Each vector element shows azimuth of a source in degree."/>
       <Parameter name="ELEVATIONS" type="object" value="&lt;Vector&lt;float&gt; 0 0 &gt;" description="Elevations of source locations. Each element represents an elevation of each source location."/>
       <Parameter name="POWER" type="object" value="&lt;Vector&lt;float&gt; &gt;" description="Power of sources. Each element represents a power of each source."/>
       <Parameter name="MIN_ID" type="int" value="0" description="Minimum ID of source locations. ID is given from MIN_ID and incremented for the latter sources."/>
